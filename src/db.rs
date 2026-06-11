@@ -95,6 +95,11 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY (order_id) REFERENCES orders(id),
             FOREIGN KEY (customer_id) REFERENCES customers(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS sequences (
+            name  TEXT PRIMARY KEY,
+            value INTEGER NOT NULL DEFAULT 0
         );"
     )?;
 

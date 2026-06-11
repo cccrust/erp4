@@ -11,47 +11,34 @@ pub struct CustomerCommand {
 
 #[derive(Subcommand)]
 pub enum CustomerSubcommands {
-    /// Add a new customer
     Add {
-        /// Customer name
         name: String,
-        /// Email address
         #[arg(long)]
         email: Option<String>,
-        /// Phone number
         #[arg(long)]
         phone: Option<String>,
-        /// Address
         #[arg(long)]
         address: Option<String>,
     },
-    /// List all customers
-    List,
-    /// Get a customer by ID
+    List {
+        #[arg(long, short)]
+        search: Option<String>,
+    },
     Get {
-        /// Customer ID
         id: i64,
     },
-    /// Update a customer
     Update {
-        /// Customer ID
         id: i64,
-        /// New name
         #[arg(long)]
         name: Option<String>,
-        /// New email
         #[arg(long)]
         email: Option<String>,
-        /// New phone
         #[arg(long)]
         phone: Option<String>,
-        /// New address
         #[arg(long)]
         address: Option<String>,
     },
-    /// Delete a customer
     Delete {
-        /// Customer ID
         id: i64,
     },
 }
@@ -62,8 +49,8 @@ pub fn run(conn: &Connection, cmd: &CustomerSubcommands) -> Result<()> {
             let id = customer::create_customer(conn, name, email.as_deref(), phone.as_deref(), address.as_deref())?;
             println!("Created customer #{}: {}", id, name);
         }
-        CustomerSubcommands::List => {
-            let customers = customer::list_customers(conn)?;
+        CustomerSubcommands::List { search } => {
+            let customers = customer::list_customers(conn, search.as_deref())?;
             if customers.is_empty() {
                 println!("No customers found.");
                 return Ok(());

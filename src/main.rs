@@ -43,6 +43,9 @@ fn main() -> Result<()> {
         cli::Commands::Invoice(cmd) => {
             cli::invoice::run(&conn, &cmd.subcommand)?;
         }
+        cli::Commands::Report(cmd) => {
+            cli::report::run(&conn, &cmd.subcommand)?;
+        }
     }
 
     Ok(())

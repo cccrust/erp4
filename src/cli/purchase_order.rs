@@ -11,43 +11,32 @@ pub struct PurchaseOrderCommand {
 
 #[derive(Subcommand)]
 pub enum PurchaseOrderSubcommands {
-    /// Create a new purchase order
     Create {
-        /// Supplier ID
         supplier_id: i64,
-        /// Notes
         #[arg(long)]
         notes: Option<String>,
     },
-    /// List all purchase orders
-    List,
-    /// Get purchase order details
+    List {
+        #[arg(long)]
+        status: Option<String>,
+    },
     Get {
         id: i64,
     },
-    /// Update purchase order status
     UpdateStatus {
         id: i64,
-        /// Status: pending, approved, received, cancelled
         status: String,
     },
-    /// Delete a purchase order
     Delete {
         id: i64,
     },
-    /// Add item to purchase order
     AddItem {
-        /// Purchase order ID
         po_id: i64,
-        /// Product ID
         product_id: i64,
-        /// Quantity
         quantity: i64,
-        /// Unit price
         #[arg(long)]
         unit_price: Option<f64>,
     },
-    /// List items in a purchase order
     Items {
         po_id: i64,
     },
@@ -59,8 +48,8 @@ pub fn run(conn: &Connection, cmd: &PurchaseOrderSubcommands) -> Result<()> {
             let id = purchase_order::create_purchase_order(conn, *supplier_id, notes.as_deref())?;
             println!("Created purchase order #{} for supplier #{}", id, supplier_id);
         }
-        PurchaseOrderSubcommands::List => {
-            let pos = purchase_order::list_purchase_orders(conn)?;
+        PurchaseOrderSubcommands::List { status } => {
+            let pos = purchase_order::list_purchase_orders(conn, status.as_deref())?;
             if pos.is_empty() {
                 println!("No purchase orders found.");
                 return Ok(());
@@ -98,10 +87,10 @@ pub fn run(conn: &Connection, cmd: &PurchaseOrderSubcommands) -> Result<()> {
             }
         }
         PurchaseOrderSubcommands::UpdateStatus { id, status } => {
-            if purchase_order::update_purchase_order_status(conn, *id, status)? {
-                println!("Purchase order #{} status updated to '{}'.", id, status);
-            } else {
-                println!("Purchase order #{} not found.", id);
+            match purchase_order::update_purchase_order_status(conn, *id, status) {
+                Ok(true) => println!("Purchase order #{} status updated to '{}'.", id, status),
+                Ok(false) => println!("Purchase order #{} not found.", id),
+                Err(e) => println!("Error: {}", e),
             }
         }
         PurchaseOrderSubcommands::Delete { id } => {
@@ -120,8 +109,10 @@ pub fn run(conn: &Connection, cmd: &PurchaseOrderSubcommands) -> Result<()> {
                     prod.price
                 }
             };
-            let item_id = purchase_order::add_purchase_order_item(conn, *po_id, *product_id, *quantity, price)?;
-            println!("Added item #{} to purchase order #{}", item_id, po_id);
+            match purchase_order::add_purchase_order_item(conn, *po_id, *product_id, *quantity, price) {
+                Ok(item_id) => println!("Added item #{} to purchase order #{}", item_id, po_id),
+                Err(e) => println!("Error: {}", e),
+            }
         }
         PurchaseOrderSubcommands::Items { po_id } => {
             let items = purchase_order::list_purchase_order_items(conn, *po_id)?;

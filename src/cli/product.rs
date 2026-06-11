@@ -11,28 +11,24 @@ pub struct ProductCommand {
 
 #[derive(Subcommand)]
 pub enum ProductSubcommands {
-    /// Add a new product
     Add {
-        /// Product name
         name: String,
-        /// SKU (unique)
         sku: String,
-        /// Price
         price: f64,
-        /// Stock quantity
         #[arg(long, default_value_t = 0)]
         stock: i64,
-        /// Description
         #[arg(long)]
         description: Option<String>,
     },
-    /// List all products
-    List,
-    /// Get a product by ID
+    List {
+        #[arg(long, short)]
+        search: Option<String>,
+        #[arg(long)]
+        low_stock: Option<i64>,
+    },
     Get {
         id: i64,
     },
-    /// Update a product
     Update {
         id: i64,
         #[arg(long)]
@@ -46,7 +42,6 @@ pub enum ProductSubcommands {
         #[arg(long)]
         description: Option<String>,
     },
-    /// Delete a product
     Delete {
         id: i64,
     },
@@ -58,13 +53,13 @@ pub fn run(conn: &Connection, cmd: &ProductSubcommands) -> Result<()> {
             let id = product::create_product(conn, name, sku, *price, *stock, description.as_deref())?;
             println!("Created product #{}: {} ({})", id, name, sku);
         }
-        ProductSubcommands::List => {
-            let products = product::list_products(conn)?;
+        ProductSubcommands::List { search, low_stock } => {
+            let products = product::list_products(conn, search.as_deref(), *low_stock)?;
             if products.is_empty() {
                 println!("No products found.");
                 return Ok(());
             }
-            println!("{:<4} {:<20} {:<12} {:>8} {:>6} {:>6}", "ID", "Name", "SKU", "Price", "Stock", "");
+            println!("{:<4} {:<20} {:<12} {:>8} {:>6}", "ID", "Name", "SKU", "Price", "Stock");
             println!("{}", "-".repeat(80));
             for p in &products {
                 println!("{:<4} {:<20} {:<12} {:>8.2} {:>6}",

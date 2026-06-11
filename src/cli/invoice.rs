@@ -11,36 +11,33 @@ pub struct InvoiceCommand {
 
 #[derive(Subcommand)]
 pub enum InvoiceSubcommands {
-    /// Create a new invoice
     Create {
-        /// Invoice number (unique)
-        invoice_number: String,
-        /// Order ID (optional)
+        /// Invoice number (omit for auto-generate)
+        invoice_number: Option<String>,
         #[arg(long)]
         order_id: Option<i64>,
-        /// Customer ID
+        #[arg(long)]
         customer_id: i64,
-        /// Due date (YYYY-MM-DD)
+        #[arg(long)]
         due_date: String,
-        /// Amount
+        #[arg(long)]
         amount: f64,
-        /// Notes
         #[arg(long)]
         notes: Option<String>,
     },
-    /// List all invoices
-    List,
-    /// Get invoice details
+    List {
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        customer_id: Option<i64>,
+    },
     Get {
         id: i64,
     },
-    /// Update invoice status
     UpdateStatus {
         id: i64,
-        /// Status: unpaid, paid, overdue, cancelled
         status: String,
     },
-    /// Delete an invoice
     Delete {
         id: i64,
     },
@@ -49,11 +46,13 @@ pub enum InvoiceSubcommands {
 pub fn run(conn: &Connection, cmd: &InvoiceSubcommands) -> Result<()> {
     match cmd {
         InvoiceSubcommands::Create { invoice_number, order_id, customer_id, due_date, amount, notes } => {
-            let id = invoice::create_invoice(conn, invoice_number, *order_id, *customer_id, due_date, *amount, notes.as_deref())?;
-            println!("Created invoice #{} ({})", id, invoice_number);
+            match invoice::create_invoice(conn, invoice_number.as_deref(), *order_id, *customer_id, due_date, *amount, notes.as_deref()) {
+                Ok(id) => println!("Created invoice #{}", id),
+                Err(e) => println!("Error: {}", e),
+            }
         }
-        InvoiceSubcommands::List => {
-            let invoices = invoice::list_invoices(conn)?;
+        InvoiceSubcommands::List { status, customer_id } => {
+            let invoices = invoice::list_invoices(conn, status.as_deref(), *customer_id)?;
             if invoices.is_empty() {
                 println!("No invoices found.");
                 return Ok(());
@@ -84,10 +83,10 @@ pub fn run(conn: &Connection, cmd: &InvoiceSubcommands) -> Result<()> {
             }
         }
         InvoiceSubcommands::UpdateStatus { id, status } => {
-            if invoice::update_invoice_status(conn, *id, status)? {
-                println!("Invoice #{} status updated to '{}'.", id, status);
-            } else {
-                println!("Invoice #{} not found.", id);
+            match invoice::update_invoice_status(conn, *id, status) {
+                Ok(true) => println!("Invoice #{} status updated to '{}'.", id, status),
+                Ok(false) => println!("Invoice #{} not found.", id),
+                Err(e) => println!("Error: {}", e),
             }
         }
         InvoiceSubcommands::Delete { id } => {

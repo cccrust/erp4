@@ -11,43 +11,34 @@ pub struct OrderCommand {
 
 #[derive(Subcommand)]
 pub enum OrderSubcommands {
-    /// Create a new order
     Create {
-        /// Customer ID
         customer_id: i64,
-        /// Notes
         #[arg(long)]
         notes: Option<String>,
     },
-    /// List all orders
-    List,
-    /// Get order details
+    List {
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        customer_id: Option<i64>,
+    },
     Get {
         id: i64,
     },
-    /// Update order status
     UpdateStatus {
         id: i64,
-        /// Status: pending, confirmed, shipped, delivered, cancelled
         status: String,
     },
-    /// Delete an order
     Delete {
         id: i64,
     },
-    /// Add item to order
     AddItem {
-        /// Order ID
         order_id: i64,
-        /// Product ID
         product_id: i64,
-        /// Quantity
         quantity: i64,
-        /// Unit price (overrides product price)
         #[arg(long)]
         unit_price: Option<f64>,
     },
-    /// List items in an order
     Items {
         order_id: i64,
     },
@@ -59,14 +50,14 @@ pub fn run(conn: &Connection, cmd: &OrderSubcommands) -> Result<()> {
             let id = order::create_order(conn, *customer_id, notes.as_deref())?;
             println!("Created order #{} for customer #{}", id, customer_id);
         }
-        OrderSubcommands::List => {
-            let orders = order::list_orders(conn)?;
+        OrderSubcommands::List { status, customer_id } => {
+            let orders = order::list_orders(conn, status.as_deref(), *customer_id)?;
             if orders.is_empty() {
                 println!("No orders found.");
                 return Ok(());
             }
-            println!("{:<4} {:<12} {:<12} {:<12} {:>10} {:>10}", "ID", "CustomerID", "Date", "Status", "Amount", "");
-            println!("{}", "-".repeat(80));
+            println!("{:<4} {:<12} {:<12} {:<12} {:>10}", "ID", "CustomerID", "Date", "Status", "Amount");
+            println!("{}", "-".repeat(60));
             for o in &orders {
                 println!("{:<4} {:<12} {:<12} {:<12} {:>10.2}",
                     o.id, o.customer_id, o.order_date, o.status, o.total_amount);
@@ -98,10 +89,10 @@ pub fn run(conn: &Connection, cmd: &OrderSubcommands) -> Result<()> {
             }
         }
         OrderSubcommands::UpdateStatus { id, status } => {
-            if order::update_order_status(conn, *id, status)? {
-                println!("Order #{} status updated to '{}'.", id, status);
-            } else {
-                println!("Order #{} not found.", id);
+            match order::update_order_status(conn, *id, status) {
+                Ok(true) => println!("Order #{} status updated to '{}'.", id, status),
+                Ok(false) => println!("Order #{} not found.", id),
+                Err(e) => println!("Error: {}", e),
             }
         }
         OrderSubcommands::Delete { id } => {
@@ -120,8 +111,10 @@ pub fn run(conn: &Connection, cmd: &OrderSubcommands) -> Result<()> {
                     prod.price
                 }
             };
-            let item_id = order::add_order_item(conn, *order_id, *product_id, *quantity, price)?;
-            println!("Added item #{} to order #{}", item_id, order_id);
+            match order::add_order_item(conn, *order_id, *product_id, *quantity, price) {
+                Ok(item_id) => println!("Added item #{} to order #{}", item_id, order_id),
+                Err(e) => println!("Error: {}", e),
+            }
         }
         OrderSubcommands::Items { order_id } => {
             let items = order::list_order_items(conn, *order_id)?;
