@@ -50,4 +50,12 @@ pub enum Commands {
     User(UserCommand),
     Session(SessionCommand),
     Export(ExportCommand),
+    Web {
+        #[arg(long, default_value_t = 8080)]
+        port: u16,
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+        #[arg(long)]
+        dev: bool,
+    },
 }

@@ -2,7 +2,7 @@
 
 ## 專案概要
 
-Rust + SQLite CLI ERP 系統。單一 crate，二進位名稱為 `erp4`。
+Rust + SQLite CLI + Web ERP 系統。單一 crate，二進位名稱為 `erp4`。
 
 ## 開發指令
 
@@ -13,6 +13,9 @@ cargo test                           # 執行所有測試
 cargo fmt                            # 格式化
 cargo clippy                         # 靜態分析
 cargo check                          # 型別檢查
+cd web && npm ci && npm run build    # 建置前端
+cd web && npm run dev                # 前端 dev server (port 5173)
+ERP4_DB=erp4-dev.db cargo run -- web --dev  # API dev server (port 8080)
 ```
 
 無 CI、無 pre-commit hook、無 codegen、無 migration 系統。
@@ -20,6 +23,7 @@ cargo check                          # 型別檢查
 ## 環境變數
 
 - `ERP4_DB` — SQLite 資料庫路徑（預設 `erp4.db`）
+- `ERP4_JWT_SECRET` — JWT 簽章密鑰（預設開發用固定值）
 
 ## 測試
 
@@ -30,10 +34,21 @@ cargo check                          # 型別檢查
 
 ## 架構重點
 
-- **入口:** `src/main.rs` → 讀取 `ERP4_DB`、開啟 SQLite、分派 CLI 指令
+- **入口:** `src/main.rs` → 讀取 `ERP4_DB`、開啟 SQLite、分派 CLI 或 Web 指令（`#[tokio::main]`）
 - **CLI 層:** `src/cli/` (`clap` derive 模式)
 - **模型層:** `src/model/` — CRUD + 業務邏輯 + 測試
+- **Web 層:** `src/web/` (Axum 0.8) — JWT 認證 + RESTful API + React SPA
+- **前端:** `web/` — React 19 + TypeScript + Vite + Tailwind CSS v4
 - **資料庫初始化:** `src/db.rs` (`CREATE TABLE IF NOT EXISTS`)，11 張表
+
+## Web 模式
+
+```bash
+erp4 web                   # 正式模式 (port 8080, 127.0.0.1, 嵌入靜態資源)
+erp4 web --port 3000       # 自訂埠號
+erp4 web --host 0.0.0.0    # 監聽所有介面
+erp4 web --dev             # 開發模式 (無靜態資源服務，需另啟 Vite)
+```
 
 ## 商務邏輯
 
