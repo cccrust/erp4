@@ -2,8 +2,9 @@ use crate::model::product;
 use anyhow::{bail, Result};
 use chrono::Local;
 use rusqlite::{params, Connection};
+use serde::Serialize;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PurchaseOrder {
     pub id: i64,
     pub supplier_id: i64,
@@ -15,7 +16,7 @@ pub struct PurchaseOrder {
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PurchaseOrderItem {
     pub id: i64,
     pub purchase_order_id: i64,

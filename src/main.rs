@@ -46,6 +46,15 @@ fn main() -> Result<()> {
         cli::Commands::Report(cmd) => {
             cli::report::run(&conn, &cmd.subcommand)?;
         }
+        cli::Commands::User(cmd) => {
+            cli::user::run(&conn, &cmd.subcommand)?;
+        }
+        cli::Commands::Session(cmd) => {
+            cli::session::run(&conn, &cmd.subcommand)?;
+        }
+        cli::Commands::Export(cmd) => {
+            cli::export::run(&conn, cmd)?;
+        }
     }
 
     Ok(())

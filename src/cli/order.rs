@@ -31,6 +31,8 @@ pub enum OrderSubcommands {
     },
     Get {
         id: i64,
+        #[arg(long, default_value = "table")]
+        format: String,
     },
     UpdateStatus {
         id: i64,
@@ -72,7 +74,9 @@ pub fn run(conn: &Connection, cmd: &OrderSubcommands) -> Result<()> {
                 println!("查無訂單資料。");
                 return Ok(());
             }
-            if format == "csv" {
+            if format == "json" {
+                println!("{}", serde_json::to_string_pretty(&orders)?);
+            } else if format == "csv" {
                 println!(
                     "{}",
                     fmt::format_csv_line(&[
@@ -116,30 +120,34 @@ pub fn run(conn: &Connection, cmd: &OrderSubcommands) -> Result<()> {
                 }
             }
         }
-        OrderSubcommands::Get { id } => match order::get_order(conn, *id)? {
+        OrderSubcommands::Get { id, format } => match order::get_order(conn, *id)? {
             Some(o) => {
-                println!("ID:           {}", o.id);
-                println!("客戶 ID:      {}", o.customer_id);
-                println!("訂單日期:     {}", o.order_date);
-                println!("狀態:         {}", fmt::status_color(&o.status));
-                println!("總金額:       {}", fmt::thousands(o.total_amount));
-                println!("備註:         {}", o.notes.as_deref().unwrap_or("N/A"));
-                println!("建立時間:     {}", o.created_at);
-                println!("更新時間:     {}", o.updated_at);
+                if format == "json" {
+                    println!("{}", serde_json::to_string_pretty(&o)?);
+                } else {
+                    println!("ID:           {}", o.id);
+                    println!("客戶 ID:      {}", o.customer_id);
+                    println!("訂單日期:     {}", o.order_date);
+                    println!("狀態:         {}", fmt::status_color(&o.status));
+                    println!("總金額:       {}", fmt::thousands(o.total_amount));
+                    println!("備註:         {}", o.notes.as_deref().unwrap_or("N/A"));
+                    println!("建立時間:     {}", o.created_at);
+                    println!("更新時間:     {}", o.updated_at);
 
-                let items = order::list_order_items(conn, o.id)?;
-                if !items.is_empty() {
-                    println!("\n明細:");
-                    println!("{:<4} {:<12} {:>8} {:>10}", "ID", "產品ID", "數量", "單價");
-                    println!("{}", "-".repeat(40));
-                    for item in &items {
-                        println!(
-                            "{:<4} {:<12} {:>8} {:>10}",
-                            item.id,
-                            item.product_id,
-                            item.quantity,
-                            fmt::thousands(item.unit_price)
-                        );
+                    let items = order::list_order_items(conn, o.id)?;
+                    if !items.is_empty() {
+                        println!("\n明細:");
+                        println!("{:<4} {:<12} {:>8} {:>10}", "ID", "產品ID", "數量", "單價");
+                        println!("{}", "-".repeat(40));
+                        for item in &items {
+                            println!(
+                                "{:<4} {:<12} {:>8} {:>10}",
+                                item.id,
+                                item.product_id,
+                                item.quantity,
+                                fmt::thousands(item.unit_price)
+                            );
+                        }
                     }
                 }
             }

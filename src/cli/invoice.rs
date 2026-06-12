@@ -40,6 +40,8 @@ pub enum InvoiceSubcommands {
     },
     Get {
         id: i64,
+        #[arg(long, default_value = "table")]
+        format: String,
     },
     UpdateStatus {
         id: i64,
@@ -86,7 +88,9 @@ pub fn run(conn: &Connection, cmd: &InvoiceSubcommands) -> Result<()> {
                 println!("查無發票資料。");
                 return Ok(());
             }
-            if format == "csv" {
+            if format == "json" {
+                println!("{}", serde_json::to_string_pretty(&invoices)?);
+            } else if format == "csv" {
                 println!(
                     "{}",
                     fmt::format_csv_line(&[
@@ -133,25 +137,29 @@ pub fn run(conn: &Connection, cmd: &InvoiceSubcommands) -> Result<()> {
                 }
             }
         }
-        InvoiceSubcommands::Get { id } => match invoice::get_invoice(conn, *id)? {
+        InvoiceSubcommands::Get { id, format } => match invoice::get_invoice(conn, *id)? {
             Some(inv) => {
-                println!("ID:            {}", inv.id);
-                println!("發票號碼:      {}", inv.invoice_number);
-                println!(
-                    "訂單 ID:       {}",
-                    inv.order_id
-                        .map(|x| x.to_string())
-                        .as_deref()
-                        .unwrap_or("N/A")
-                );
-                println!("客戶 ID:       {}", inv.customer_id);
-                println!("發票日期:      {}", inv.invoice_date);
-                println!("到期日:        {}", inv.due_date);
-                println!("狀態:          {}", fmt::status_color(&inv.status));
-                println!("金額:          {}", fmt::thousands(inv.amount));
-                println!("備註:          {}", inv.notes.as_deref().unwrap_or("N/A"));
-                println!("建立時間:      {}", inv.created_at);
-                println!("更新時間:      {}", inv.updated_at);
+                if format == "json" {
+                    println!("{}", serde_json::to_string_pretty(&inv)?);
+                } else {
+                    println!("ID:            {}", inv.id);
+                    println!("發票號碼:      {}", inv.invoice_number);
+                    println!(
+                        "訂單 ID:       {}",
+                        inv.order_id
+                            .map(|x| x.to_string())
+                            .as_deref()
+                            .unwrap_or("N/A")
+                    );
+                    println!("客戶 ID:       {}", inv.customer_id);
+                    println!("發票日期:      {}", inv.invoice_date);
+                    println!("到期日:        {}", inv.due_date);
+                    println!("狀態:          {}", fmt::status_color(&inv.status));
+                    println!("金額:          {}", fmt::thousands(inv.amount));
+                    println!("備註:          {}", inv.notes.as_deref().unwrap_or("N/A"));
+                    println!("建立時間:      {}", inv.created_at);
+                    println!("更新時間:      {}", inv.updated_at);
+                }
             }
             None => println!("發票 #{} 不存在。", id),
         },

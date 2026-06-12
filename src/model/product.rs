@@ -1,8 +1,9 @@
 use anyhow::{anyhow, bail, Result};
 use chrono::Local;
 use rusqlite::{params, Connection};
+use serde::Serialize;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Product {
     pub id: i64,
     pub name: String,

@@ -1,8 +1,9 @@
 use anyhow::{bail, Result};
 use chrono::Local;
 use rusqlite::{params, Connection};
+use serde::Serialize;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Invoice {
     pub id: i64,
     pub invoice_number: String,

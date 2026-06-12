@@ -55,7 +55,9 @@ pub fn run(conn: &Connection, cmd: &ReportSubcommands) -> Result<()> {
             }
             let total_qty: i64 = rows.iter().map(|r| r.total_qty).sum();
             let total_amount: f64 = rows.iter().map(|r| r.total_amount).sum();
-            if format == "csv" {
+            if format == "json" {
+                println!("{}", serde_json::to_string_pretty(&rows)?);
+            } else if format == "csv" {
                 println!(
                     "{}",
                     fmt::format_csv_line(&[
@@ -124,7 +126,9 @@ pub fn run(conn: &Connection, cmd: &ReportSubcommands) -> Result<()> {
                 return Ok(());
             }
             let total_value: f64 = products.iter().map(|p| p.price * p.stock as f64).sum();
-            if format == "csv" {
+            if format == "json" {
+                println!("{}", serde_json::to_string_pretty(&products)?);
+            } else if format == "csv" {
                 println!(
                     "{}",
                     fmt::format_csv_line(&[
@@ -195,7 +199,9 @@ pub fn run(conn: &Connection, cmd: &ReportSubcommands) -> Result<()> {
                 return Ok(());
             }
             let total: f64 = invoices.iter().map(|i| i.amount).sum();
-            if format == "csv" {
+            if format == "json" {
+                println!("{}", serde_json::to_string_pretty(&invoices)?);
+            } else if format == "csv" {
                 println!(
                     "{}",
                     fmt::format_csv_line(&[

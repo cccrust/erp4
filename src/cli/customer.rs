@@ -1,4 +1,5 @@
 use crate::cli::fmt;
+use crate::cli::import;
 use crate::model::customer;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -33,6 +34,8 @@ pub enum CustomerSubcommands {
     },
     Get {
         id: i64,
+        #[arg(long, default_value = "table")]
+        format: String,
     },
     Update {
         id: i64,
@@ -47,6 +50,9 @@ pub enum CustomerSubcommands {
     },
     Delete {
         id: i64,
+    },
+    Import {
+        file: String,
     },
 }
 
@@ -80,7 +86,9 @@ pub fn run(conn: &Connection, cmd: &CustomerSubcommands) -> Result<()> {
                 println!("查無客戶資料。");
                 return Ok(());
             }
-            if format == "csv" {
+            if format == "json" {
+                println!("{}", serde_json::to_string_pretty(&customers)?);
+            } else if format == "csv" {
                 println!(
                     "{}",
                     fmt::format_csv_line(&[
@@ -124,15 +132,19 @@ pub fn run(conn: &Connection, cmd: &CustomerSubcommands) -> Result<()> {
                 }
             }
         }
-        CustomerSubcommands::Get { id } => match customer::get_customer(conn, *id)? {
+        CustomerSubcommands::Get { id, format } => match customer::get_customer(conn, *id)? {
             Some(c) => {
-                println!("ID:        {}", c.id);
-                println!("名稱:      {}", c.name);
-                println!("Email:     {}", c.email.as_deref().unwrap_or("N/A"));
-                println!("電話:      {}", c.phone.as_deref().unwrap_or("N/A"));
-                println!("地址:      {}", c.address.as_deref().unwrap_or("N/A"));
-                println!("建立時間:  {}", c.created_at);
-                println!("更新時間:  {}", c.updated_at);
+                if format == "json" {
+                    println!("{}", serde_json::to_string_pretty(&c)?);
+                } else {
+                    println!("ID:        {}", c.id);
+                    println!("名稱:      {}", c.name);
+                    println!("Email:     {}", c.email.as_deref().unwrap_or("N/A"));
+                    println!("電話:      {}", c.phone.as_deref().unwrap_or("N/A"));
+                    println!("地址:      {}", c.address.as_deref().unwrap_or("N/A"));
+                    println!("建立時間:  {}", c.created_at);
+                    println!("更新時間:  {}", c.updated_at);
+                }
             }
             None => println!("客戶 #{} 不存在。", id),
         },
@@ -162,6 +174,11 @@ pub fn run(conn: &Connection, cmd: &CustomerSubcommands) -> Result<()> {
             } else {
                 println!("客戶 #{} 不存在。", id);
             }
+        }
+        CustomerSubcommands::Import { file } => {
+            let content = std::fs::read_to_string(file)?;
+            let (count, errors) = import::import_customers(conn, &content)?;
+            println!("客戶匯入完成：成功 {} 筆，失敗 {} 筆", count, errors);
         }
     }
     Ok(())

@@ -1,4 +1,5 @@
 use crate::cli::fmt;
+use crate::cli::import;
 use crate::model::supplier;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -33,6 +34,8 @@ pub enum SupplierSubcommands {
     },
     Get {
         id: i64,
+        #[arg(long, default_value = "table")]
+        format: String,
     },
     Update {
         id: i64,
@@ -49,6 +52,9 @@ pub enum SupplierSubcommands {
     },
     Delete {
         id: i64,
+    },
+    Import {
+        file: String,
     },
 }
 
@@ -83,7 +89,9 @@ pub fn run(conn: &Connection, cmd: &SupplierSubcommands) -> Result<()> {
                 println!("查無供應商資料。");
                 return Ok(());
             }
-            if format == "csv" {
+            if format == "json" {
+                println!("{}", serde_json::to_string_pretty(&suppliers)?);
+            } else if format == "csv" {
                 println!(
                     "{}",
                     fmt::format_csv_line(&[
@@ -127,19 +135,23 @@ pub fn run(conn: &Connection, cmd: &SupplierSubcommands) -> Result<()> {
                 }
             }
         }
-        SupplierSubcommands::Get { id } => match supplier::get_supplier(conn, *id)? {
+        SupplierSubcommands::Get { id, format } => match supplier::get_supplier(conn, *id)? {
             Some(s) => {
-                println!("ID:            {}", s.id);
-                println!("名稱:          {}", s.name);
-                println!(
-                    "聯絡人:        {}",
-                    s.contact_person.as_deref().unwrap_or("N/A")
-                );
-                println!("Email:         {}", s.email.as_deref().unwrap_or("N/A"));
-                println!("電話:          {}", s.phone.as_deref().unwrap_or("N/A"));
-                println!("地址:          {}", s.address.as_deref().unwrap_or("N/A"));
-                println!("建立時間:      {}", s.created_at);
-                println!("更新時間:      {}", s.updated_at);
+                if format == "json" {
+                    println!("{}", serde_json::to_string_pretty(&s)?);
+                } else {
+                    println!("ID:            {}", s.id);
+                    println!("名稱:          {}", s.name);
+                    println!(
+                        "聯絡人:        {}",
+                        s.contact_person.as_deref().unwrap_or("N/A")
+                    );
+                    println!("Email:         {}", s.email.as_deref().unwrap_or("N/A"));
+                    println!("電話:          {}", s.phone.as_deref().unwrap_or("N/A"));
+                    println!("地址:          {}", s.address.as_deref().unwrap_or("N/A"));
+                    println!("建立時間:      {}", s.created_at);
+                    println!("更新時間:      {}", s.updated_at);
+                }
             }
             None => println!("供應商 #{} 不存在。", id),
         },
@@ -171,6 +183,11 @@ pub fn run(conn: &Connection, cmd: &SupplierSubcommands) -> Result<()> {
             } else {
                 println!("供應商 #{} 不存在。", id);
             }
+        }
+        SupplierSubcommands::Import { file } => {
+            let content = std::fs::read_to_string(file)?;
+            let (count, errors) = import::import_suppliers(conn, &content)?;
+            println!("供應商匯入完成：成功 {} 筆，失敗 {} 筆", count, errors);
         }
     }
     Ok(())

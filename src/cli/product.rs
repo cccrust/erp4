@@ -1,4 +1,5 @@
 use crate::cli::fmt;
+use crate::cli::import;
 use crate::model::product;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -35,6 +36,8 @@ pub enum ProductSubcommands {
     },
     Get {
         id: i64,
+        #[arg(long, default_value = "table")]
+        format: String,
     },
     Update {
         id: i64,
@@ -51,6 +54,9 @@ pub enum ProductSubcommands {
     },
     Delete {
         id: i64,
+    },
+    Import {
+        file: String,
     },
 }
 
@@ -81,7 +87,9 @@ pub fn run(conn: &Connection, cmd: &ProductSubcommands) -> Result<()> {
                 println!("查無產品資料。");
                 return Ok(());
             }
-            if format == "csv" {
+            if format == "json" {
+                println!("{}", serde_json::to_string_pretty(&products)?);
+            } else if format == "csv" {
                 println!(
                     "{}",
                     fmt::format_csv_line(&[
@@ -125,16 +133,20 @@ pub fn run(conn: &Connection, cmd: &ProductSubcommands) -> Result<()> {
                 }
             }
         }
-        ProductSubcommands::Get { id } => match product::get_product(conn, *id)? {
+        ProductSubcommands::Get { id, format } => match product::get_product(conn, *id)? {
             Some(p) => {
-                println!("ID:          {}", p.id);
-                println!("名稱:        {}", p.name);
-                println!("SKU:         {}", p.sku);
-                println!("價格:        {}", fmt::thousands(p.price));
-                println!("庫存:        {}", p.stock);
-                println!("描述:        {}", p.description.as_deref().unwrap_or("N/A"));
-                println!("建立時間:    {}", p.created_at);
-                println!("更新時間:    {}", p.updated_at);
+                if format == "json" {
+                    println!("{}", serde_json::to_string_pretty(&p)?);
+                } else {
+                    println!("ID:          {}", p.id);
+                    println!("名稱:        {}", p.name);
+                    println!("SKU:         {}", p.sku);
+                    println!("價格:        {}", fmt::thousands(p.price));
+                    println!("庫存:        {}", p.stock);
+                    println!("描述:        {}", p.description.as_deref().unwrap_or("N/A"));
+                    println!("建立時間:    {}", p.created_at);
+                    println!("更新時間:    {}", p.updated_at);
+                }
             }
             None => println!("產品 #{} 不存在。", id),
         },
@@ -166,6 +178,11 @@ pub fn run(conn: &Connection, cmd: &ProductSubcommands) -> Result<()> {
             } else {
                 println!("產品 #{} 不存在。", id);
             }
+        }
+        ProductSubcommands::Import { file } => {
+            let content = std::fs::read_to_string(file)?;
+            let (count, errors) = import::import_products(conn, &content)?;
+            println!("產品匯入完成：成功 {} 筆，失敗 {} 筆", count, errors);
         }
     }
     Ok(())

@@ -1,22 +1,29 @@
 use clap::{Parser, Subcommand};
 
 pub mod customer;
+pub mod export;
 pub mod fmt;
+pub mod import;
 pub mod init;
 pub mod invoice;
 pub mod order;
 pub mod product;
 pub mod purchase_order;
 pub mod report;
+pub mod session;
 pub mod supplier;
+pub mod user;
 
 pub use customer::CustomerCommand;
+pub use export::ExportCommand;
 pub use invoice::InvoiceCommand;
 pub use order::OrderCommand;
 pub use product::ProductCommand;
 pub use purchase_order::PurchaseOrderCommand;
 pub use report::ReportCommand;
+pub use session::SessionCommand;
 pub use supplier::SupplierCommand;
+pub use user::UserCommand;
 
 #[derive(Parser)]
 #[command(
@@ -40,4 +47,7 @@ pub enum Commands {
     PurchaseOrder(PurchaseOrderCommand),
     Invoice(InvoiceCommand),
     Report(ReportCommand),
+    User(UserCommand),
+    Session(SessionCommand),
+    Export(ExportCommand),
 }

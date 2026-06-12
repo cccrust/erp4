@@ -100,6 +100,23 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS sequences (
             name  TEXT PRIMARY KEY,
             value INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS users (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            username     TEXT NOT NULL UNIQUE,
+            password     TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            role         TEXT NOT NULL DEFAULT 'admin',
+            created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS sessions (
+            id          TEXT PRIMARY KEY,
+            user_id     INTEGER NOT NULL REFERENCES users(id),
+            expires_at  TEXT NOT NULL,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now'))
         );",
     )?;
 

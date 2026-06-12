@@ -23,9 +23,9 @@ cargo check                          # 型別檢查
 
 ## 測試
 
-- 26 個單元測試，分布於 `src/model/*.rs` 與 `src/cli/fmt.rs`
+- 36 個單元測試，分布於 `src/model/*.rs`、`src/cli/import.rs` 與 `src/cli/fmt.rs`
 - 使用 In-memory SQLite，Schema 載入來自 `src/db.sql`（`include_str!`）
-- 整合測試腳本：`case1.sh`（基礎流程）、`case2.sh`（v0.2 新功能）、`case3.sh`（v0.3 新功能），需手動執行
+- 整合測試腳本：`case1.sh`（基礎流程）、`case2.sh`（v0.2 新功能）、`case3.sh`（v0.3 新功能）、`case4.sh`（v0.5 新功能），需手動執行
 - 腳本使用 `ERP4=${ERP4:-cargo run --}`，可覆寫為已編譯二進位
 
 ## 架構重點
@@ -33,7 +33,7 @@ cargo check                          # 型別檢查
 - **入口:** `src/main.rs` → 讀取 `ERP4_DB`、開啟 SQLite、分派 CLI 指令
 - **CLI 層:** `src/cli/` (`clap` derive 模式)
 - **模型層:** `src/model/` — CRUD + 業務邏輯 + 測試
-- **資料庫初始化:** `src/db.rs` (`CREATE TABLE IF NOT EXISTS`)，9 張表
+- **資料庫初始化:** `src/db.rs` (`CREATE TABLE IF NOT EXISTS`)，11 張表
 
 ## 商務邏輯
 

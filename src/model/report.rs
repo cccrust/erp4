@@ -2,8 +2,9 @@ use crate::model::invoice;
 use crate::model::product;
 use anyhow::Result;
 use rusqlite::{params, Connection};
+use serde::Serialize;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct SalesRow {
     pub product_id: i64,
     pub product_name: String,

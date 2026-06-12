@@ -4,4 +4,6 @@ pub mod order;
 pub mod product;
 pub mod purchase_order;
 pub mod report;
+pub mod session;
 pub mod supplier;
+pub mod user;
