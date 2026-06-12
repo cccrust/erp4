@@ -1,7 +1,8 @@
+use crate::cli::fmt;
+use crate::model::supplier;
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 use rusqlite::Connection;
-use anyhow::Result;
-use crate::model::supplier;
 
 #[derive(Parser)]
 pub struct SupplierCommand {
@@ -11,7 +12,6 @@ pub struct SupplierCommand {
 
 #[derive(Subcommand)]
 pub enum SupplierSubcommands {
-    /// Add a new supplier
     Add {
         name: String,
         #[arg(long)]
@@ -23,13 +23,17 @@ pub enum SupplierSubcommands {
         #[arg(long)]
         address: Option<String>,
     },
-    /// List all suppliers
-    List,
-    /// Get a supplier by ID
+    List {
+        #[arg(long, default_value = "table")]
+        format: String,
+        #[arg(long)]
+        page: Option<i64>,
+        #[arg(long)]
+        page_size: Option<i64>,
+    },
     Get {
         id: i64,
     },
-    /// Update a supplier
     Update {
         id: i64,
         #[arg(long)]
@@ -43,7 +47,6 @@ pub enum SupplierSubcommands {
         #[arg(long)]
         address: Option<String>,
     },
-    /// Delete a supplier
     Delete {
         id: i64,
     },
@@ -51,53 +54,122 @@ pub enum SupplierSubcommands {
 
 pub fn run(conn: &Connection, cmd: &SupplierSubcommands) -> Result<()> {
     match cmd {
-        SupplierSubcommands::Add { name, contact_person, email, phone, address } => {
-            let id = supplier::create_supplier(conn, name, contact_person.as_deref(), email.as_deref(), phone.as_deref(), address.as_deref())?;
-            println!("Created supplier #{}: {}", id, name);
+        SupplierSubcommands::Add {
+            name,
+            contact_person,
+            email,
+            phone,
+            address,
+        } => {
+            match supplier::create_supplier(
+                conn,
+                name,
+                contact_person.as_deref(),
+                email.as_deref(),
+                phone.as_deref(),
+                address.as_deref(),
+            ) {
+                Ok(id) => println!("已建立供應商 #{}: {}", id, name),
+                Err(e) => println!("{}", fmt::error_msg(&e.to_string())),
+            }
         }
-        SupplierSubcommands::List => {
-            let suppliers = supplier::list_suppliers(conn)?;
+        SupplierSubcommands::List {
+            format,
+            page,
+            page_size,
+        } => {
+            let suppliers = supplier::list_suppliers(conn, *page, *page_size)?;
             if suppliers.is_empty() {
-                println!("No suppliers found.");
+                println!("查無供應商資料。");
                 return Ok(());
             }
-            println!("{:<4} {:<20} {:<20} {:<25} {:<15}", "ID", "Name", "Contact", "Email", "Phone");
-            println!("{}", "-".repeat(90));
-            for s in &suppliers {
-                println!("{:<4} {:<20} {:<20} {:<25} {:<15}",
-                    s.id, s.name,
-                    s.contact_person.as_deref().unwrap_or(""),
-                    s.email.as_deref().unwrap_or(""),
-                    s.phone.as_deref().unwrap_or(""));
-            }
-        }
-        SupplierSubcommands::Get { id } => {
-            match supplier::get_supplier(conn, *id)? {
-                Some(s) => {
-                    println!("ID:             {}", s.id);
-                    println!("Name:           {}", s.name);
-                    println!("Contact Person: {}", s.contact_person.as_deref().unwrap_or("N/A"));
-                    println!("Email:          {}", s.email.as_deref().unwrap_or("N/A"));
-                    println!("Phone:          {}", s.phone.as_deref().unwrap_or("N/A"));
-                    println!("Address:        {}", s.address.as_deref().unwrap_or("N/A"));
-                    println!("Created:        {}", s.created_at);
-                    println!("Updated:        {}", s.updated_at);
+            if format == "csv" {
+                println!(
+                    "{}",
+                    fmt::format_csv_line(&[
+                        "ID".into(),
+                        "Name".into(),
+                        "Contact".into(),
+                        "Email".into(),
+                        "Phone".into()
+                    ])
+                );
+                for s in &suppliers {
+                    println!(
+                        "{}",
+                        fmt::format_csv_line(&[
+                            s.id.to_string(),
+                            s.name.clone(),
+                            s.contact_person.as_deref().unwrap_or("").to_string(),
+                            s.email.as_deref().unwrap_or("").to_string(),
+                            s.phone.as_deref().unwrap_or("").to_string(),
+                        ])
+                    );
                 }
-                None => println!("Supplier #{} not found.", id),
+            } else {
+                println!(
+                    "{}",
+                    fmt::header(&format!(
+                        "{:<4} {:<20} {:<20} {:<25} {:<15}",
+                        "ID", "名稱", "聯絡人", "Email", "電話"
+                    ))
+                );
+                println!("{}", "-".repeat(90));
+                for s in &suppliers {
+                    println!(
+                        "{:<4} {:<20} {:<20} {:<25} {:<15}",
+                        s.id,
+                        s.name,
+                        s.contact_person.as_deref().unwrap_or(""),
+                        s.email.as_deref().unwrap_or(""),
+                        s.phone.as_deref().unwrap_or("")
+                    );
+                }
             }
         }
-        SupplierSubcommands::Update { id, name, contact_person, email, phone, address } => {
-            if supplier::update_supplier(conn, *id, name.as_deref(), contact_person.as_deref(), email.as_deref(), phone.as_deref(), address.as_deref())? {
-                println!("Supplier #{} updated.", id);
-            } else {
-                println!("Supplier #{} not found.", id);
+        SupplierSubcommands::Get { id } => match supplier::get_supplier(conn, *id)? {
+            Some(s) => {
+                println!("ID:            {}", s.id);
+                println!("名稱:          {}", s.name);
+                println!(
+                    "聯絡人:        {}",
+                    s.contact_person.as_deref().unwrap_or("N/A")
+                );
+                println!("Email:         {}", s.email.as_deref().unwrap_or("N/A"));
+                println!("電話:          {}", s.phone.as_deref().unwrap_or("N/A"));
+                println!("地址:          {}", s.address.as_deref().unwrap_or("N/A"));
+                println!("建立時間:      {}", s.created_at);
+                println!("更新時間:      {}", s.updated_at);
+            }
+            None => println!("供應商 #{} 不存在。", id),
+        },
+        SupplierSubcommands::Update {
+            id,
+            name,
+            contact_person,
+            email,
+            phone,
+            address,
+        } => {
+            match supplier::update_supplier(
+                conn,
+                *id,
+                name.as_deref(),
+                contact_person.as_deref(),
+                email.as_deref(),
+                phone.as_deref(),
+                address.as_deref(),
+            ) {
+                Ok(true) => println!("供應商 #{} 已更新。", id),
+                Ok(false) => println!("供應商 #{} 不存在。", id),
+                Err(e) => println!("{}", fmt::error_msg(&e.to_string())),
             }
         }
         SupplierSubcommands::Delete { id } => {
             if supplier::delete_supplier(conn, *id)? {
-                println!("Supplier #{} deleted.", id);
+                println!("供應商 #{} 已刪除。", id);
             } else {
-                println!("Supplier #{} not found.", id);
+                println!("供應商 #{} 不存在。", id);
             }
         }
     }

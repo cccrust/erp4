@@ -1,7 +1,8 @@
+use crate::cli::fmt;
+use crate::model::product;
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 use rusqlite::Connection;
-use anyhow::Result;
-use crate::model::product;
 
 #[derive(Parser)]
 pub struct ProductCommand {
@@ -25,6 +26,12 @@ pub enum ProductSubcommands {
         search: Option<String>,
         #[arg(long)]
         low_stock: Option<i64>,
+        #[arg(long, default_value = "table")]
+        format: String,
+        #[arg(long)]
+        page: Option<i64>,
+        #[arg(long)]
+        page_size: Option<i64>,
     },
     Get {
         id: i64,
@@ -49,50 +56,115 @@ pub enum ProductSubcommands {
 
 pub fn run(conn: &Connection, cmd: &ProductSubcommands) -> Result<()> {
     match cmd {
-        ProductSubcommands::Add { name, sku, price, stock, description } => {
-            let id = product::create_product(conn, name, sku, *price, *stock, description.as_deref())?;
-            println!("Created product #{}: {} ({})", id, name, sku);
+        ProductSubcommands::Add {
+            name,
+            sku,
+            price,
+            stock,
+            description,
+        } => {
+            match product::create_product(conn, name, sku, *price, *stock, description.as_deref()) {
+                Ok(id) => println!("已建立產品 #{}: {} ({})", id, name, sku),
+                Err(e) => println!("{}", fmt::error_msg(&e.to_string())),
+            }
         }
-        ProductSubcommands::List { search, low_stock } => {
-            let products = product::list_products(conn, search.as_deref(), *low_stock)?;
+        ProductSubcommands::List {
+            search,
+            low_stock,
+            format,
+            page,
+            page_size,
+        } => {
+            let products =
+                product::list_products(conn, search.as_deref(), *low_stock, *page, *page_size)?;
             if products.is_empty() {
-                println!("No products found.");
+                println!("查無產品資料。");
                 return Ok(());
             }
-            println!("{:<4} {:<20} {:<12} {:>8} {:>6}", "ID", "Name", "SKU", "Price", "Stock");
-            println!("{}", "-".repeat(80));
-            for p in &products {
-                println!("{:<4} {:<20} {:<12} {:>8.2} {:>6}",
-                    p.id, p.name, p.sku, p.price, p.stock);
-            }
-        }
-        ProductSubcommands::Get { id } => {
-            match product::get_product(conn, *id)? {
-                Some(p) => {
-                    println!("ID:          {}", p.id);
-                    println!("Name:        {}", p.name);
-                    println!("SKU:         {}", p.sku);
-                    println!("Price:       {:.2}", p.price);
-                    println!("Stock:       {}", p.stock);
-                    println!("Description: {}", p.description.as_deref().unwrap_or("N/A"));
-                    println!("Created:     {}", p.created_at);
-                    println!("Updated:     {}", p.updated_at);
+            if format == "csv" {
+                println!(
+                    "{}",
+                    fmt::format_csv_line(&[
+                        "ID".into(),
+                        "Name".into(),
+                        "SKU".into(),
+                        "Price".into(),
+                        "Stock".into()
+                    ])
+                );
+                for p in &products {
+                    println!(
+                        "{}",
+                        fmt::format_csv_line(&[
+                            p.id.to_string(),
+                            p.name.clone(),
+                            p.sku.clone(),
+                            format!("{:.2}", p.price),
+                            p.stock.to_string(),
+                        ])
+                    );
                 }
-                None => println!("Product #{} not found.", id),
+            } else {
+                println!(
+                    "{}",
+                    fmt::header(&format!(
+                        "{:<4} {:<20} {:<12} {:>8} {:>6}",
+                        "ID", "名稱", "SKU", "價格", "庫存"
+                    ))
+                );
+                println!("{}", "-".repeat(80));
+                for p in &products {
+                    println!(
+                        "{:<4} {:<20} {:<12} {:>8} {:>6}",
+                        p.id,
+                        p.name,
+                        p.sku,
+                        fmt::thousands(p.price),
+                        p.stock
+                    );
+                }
             }
         }
-        ProductSubcommands::Update { id, name, sku, price, stock, description } => {
-            if product::update_product(conn, *id, name.as_deref(), sku.as_deref(), *price, *stock, description.as_deref())? {
-                println!("Product #{} updated.", id);
-            } else {
-                println!("Product #{} not found.", id);
+        ProductSubcommands::Get { id } => match product::get_product(conn, *id)? {
+            Some(p) => {
+                println!("ID:          {}", p.id);
+                println!("名稱:        {}", p.name);
+                println!("SKU:         {}", p.sku);
+                println!("價格:        {}", fmt::thousands(p.price));
+                println!("庫存:        {}", p.stock);
+                println!("描述:        {}", p.description.as_deref().unwrap_or("N/A"));
+                println!("建立時間:    {}", p.created_at);
+                println!("更新時間:    {}", p.updated_at);
+            }
+            None => println!("產品 #{} 不存在。", id),
+        },
+        ProductSubcommands::Update {
+            id,
+            name,
+            sku,
+            price,
+            stock,
+            description,
+        } => {
+            match product::update_product(
+                conn,
+                *id,
+                name.as_deref(),
+                sku.as_deref(),
+                *price,
+                *stock,
+                description.as_deref(),
+            ) {
+                Ok(true) => println!("產品 #{} 已更新。", id),
+                Ok(false) => println!("產品 #{} 不存在。", id),
+                Err(e) => println!("{}", fmt::error_msg(&e.to_string())),
             }
         }
         ProductSubcommands::Delete { id } => {
             if product::delete_product(conn, *id)? {
-                println!("Product #{} deleted.", id);
+                println!("產品 #{} 已刪除。", id);
             } else {
-                println!("Product #{} not found.", id);
+                println!("產品 #{} 不存在。", id);
             }
         }
     }

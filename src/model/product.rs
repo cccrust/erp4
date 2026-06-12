@@ -1,6 +1,6 @@
-use rusqlite::{params, Connection};
-use anyhow::{Result, anyhow, bail};
+use anyhow::{anyhow, bail, Result};
 use chrono::Local;
+use rusqlite::{params, Connection};
 
 #[derive(Debug, Clone)]
 pub struct Product {
@@ -24,7 +24,14 @@ pub fn validate_product(price: f64, stock: i64) -> Result<()> {
     Ok(())
 }
 
-pub fn create_product(conn: &Connection, name: &str, sku: &str, price: f64, stock: i64, description: Option<&str>) -> Result<i64> {
+pub fn create_product(
+    conn: &Connection,
+    name: &str,
+    sku: &str,
+    price: f64,
+    stock: i64,
+    description: Option<&str>,
+) -> Result<i64> {
     validate_product(price, stock)?;
     let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     conn.execute(
@@ -34,11 +41,18 @@ pub fn create_product(conn: &Connection, name: &str, sku: &str, price: f64, stoc
     Ok(conn.last_insert_rowid())
 }
 
-pub fn list_products(conn: &Connection, search: Option<&str>, low_stock: Option<i64>) -> Result<Vec<Product>> {
+pub fn list_products(
+    conn: &Connection,
+    search: Option<&str>,
+    low_stock: Option<i64>,
+    page: Option<i64>,
+    page_size: Option<i64>,
+) -> Result<Vec<Product>> {
     let mut sql = "SELECT id, name, description, sku, price, stock, created_at, updated_at FROM products WHERE 1=1".to_string();
     let mut args: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
     if let Some(s) = search {
-        sql.push_str(" AND (name LIKE ?1 OR sku LIKE ?1)");
+        let idx = args.len() + 1;
+        sql.push_str(&format!(" AND (name LIKE ?{} OR sku LIKE ?{})", idx, idx));
         args.push(Box::new(format!("%{}%", s)));
     }
     if let Some(ls) = low_stock {
@@ -46,6 +60,15 @@ pub fn list_products(conn: &Connection, search: Option<&str>, low_stock: Option<
         args.push(Box::new(ls));
     }
     sql.push_str(" ORDER BY id");
+    if let (Some(ps), Some(p)) = (page_size, page) {
+        sql.push_str(&format!(
+            " LIMIT ?{} OFFSET ?{}",
+            args.len() + 1,
+            args.len() + 2
+        ));
+        args.push(Box::new(ps));
+        args.push(Box::new((p - 1) * ps));
+    }
     let mut stmt = conn.prepare(&sql)?;
     let params_refs: Vec<&dyn rusqlite::types::ToSql> = args.iter().map(|a| a.as_ref()).collect();
     let rows = stmt.query_map(params_refs.as_slice(), |row| {
@@ -91,7 +114,13 @@ pub fn adjust_stock(conn: &Connection, id: i64, delta: i64) -> Result<()> {
     let product = get_product(conn, id)?.ok_or_else(|| anyhow!("Product #{} not found", id))?;
     let new_stock = product.stock + delta;
     if new_stock < 0 {
-        bail!("Insufficient stock for product #{} ({}): have {}, need {}", id, product.name, product.stock, -delta);
+        bail!(
+            "Insufficient stock for product #{} ({}): have {}, need {}",
+            id,
+            product.name,
+            product.stock,
+            -delta
+        );
     }
     let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     conn.execute(
@@ -101,7 +130,15 @@ pub fn adjust_stock(conn: &Connection, id: i64, delta: i64) -> Result<()> {
     Ok(())
 }
 
-pub fn update_product(conn: &Connection, id: i64, name: Option<&str>, sku: Option<&str>, price: Option<f64>, stock: Option<i64>, description: Option<&str>) -> Result<bool> {
+pub fn update_product(
+    conn: &Connection,
+    id: i64,
+    name: Option<&str>,
+    sku: Option<&str>,
+    price: Option<f64>,
+    stock: Option<i64>,
+    description: Option<&str>,
+) -> Result<bool> {
     let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let existing = match get_product(conn, id)? {
         Some(p) => p,
@@ -171,12 +208,11 @@ mod tests {
         create_product(&c, "Widget Alpha", "W-A", 10.0, 10, None).unwrap();
         create_product(&c, "Widget Beta", "W-B", 20.0, 20, None).unwrap();
         create_product(&c, "Gadget", "G-001", 30.0, 5, None).unwrap();
-        let res = list_products(&c, Some("Widget"), None).unwrap();
+        let res = list_products(&c, Some("Widget"), None, None, None).unwrap();
         assert_eq!(res.len(), 2);
-        let res = list_products(&c, Some("Gadget"), None).unwrap();
+        let res = list_products(&c, Some("Gadget"), None, None, None).unwrap();
         assert_eq!(res.len(), 1);
-        let res = list_products(&c, None, Some(10)).unwrap();
+        let res = list_products(&c, None, Some(10), None, None).unwrap();
         assert_eq!(res.len(), 2);
     }
 }
-

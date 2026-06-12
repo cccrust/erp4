@@ -4,9 +4,9 @@ mod cli;
 mod db;
 mod model;
 
+use anyhow::Result;
 use clap::Parser;
 use rusqlite::Connection;
-use anyhow::Result;
 use std::path::PathBuf;
 
 fn get_db_path() -> PathBuf {

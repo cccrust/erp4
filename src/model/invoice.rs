@@ -1,6 +1,6 @@
-use rusqlite::{params, Connection};
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use chrono::Local;
+use rusqlite::{params, Connection};
 
 #[derive(Debug, Clone)]
 pub struct Invoice {
@@ -41,7 +41,15 @@ pub fn validate_email(email: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn create_invoice(conn: &Connection, invoice_number: Option<&str>, order_id: Option<i64>, customer_id: i64, due_date: &str, amount: f64, notes: Option<&str>) -> Result<i64> {
+pub fn create_invoice(
+    conn: &Connection,
+    invoice_number: Option<&str>,
+    order_id: Option<i64>,
+    customer_id: i64,
+    due_date: &str,
+    amount: f64,
+    notes: Option<&str>,
+) -> Result<i64> {
     if amount <= 0.0 {
         bail!("Invoice amount must be positive");
     }
@@ -58,7 +66,13 @@ pub fn create_invoice(conn: &Connection, invoice_number: Option<&str>, order_id:
     Ok(conn.last_insert_rowid())
 }
 
-pub fn list_invoices(conn: &Connection, status_filter: Option<&str>, customer_id: Option<i64>) -> Result<Vec<Invoice>> {
+pub fn list_invoices(
+    conn: &Connection,
+    status_filter: Option<&str>,
+    customer_id: Option<i64>,
+    page: Option<i64>,
+    page_size: Option<i64>,
+) -> Result<Vec<Invoice>> {
     let mut sql = "SELECT id, invoice_number, order_id, customer_id, invoice_date, due_date, status, amount, notes, created_at, updated_at FROM invoices WHERE 1=1".to_string();
     let mut args: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
     if let Some(s) = status_filter {
@@ -70,6 +84,15 @@ pub fn list_invoices(conn: &Connection, status_filter: Option<&str>, customer_id
         args.push(Box::new(cid));
     }
     sql.push_str(" ORDER BY id");
+    if let (Some(ps), Some(p)) = (page_size, page) {
+        sql.push_str(&format!(
+            " LIMIT ?{} OFFSET ?{}",
+            args.len() + 1,
+            args.len() + 2
+        ));
+        args.push(Box::new(ps));
+        args.push(Box::new((p - 1) * ps));
+    }
     let mut stmt = conn.prepare(&sql)?;
     let params_refs: Vec<&dyn rusqlite::types::ToSql> = args.iter().map(|a| a.as_ref()).collect();
     let rows = stmt.query_map(params_refs.as_slice(), |row| {
@@ -119,7 +142,11 @@ pub fn get_invoice(conn: &Connection, id: i64) -> Result<Option<Invoice>> {
 
 pub fn update_invoice_status(conn: &Connection, id: i64, status: &str) -> Result<bool> {
     if !INVOICE_VALID_STATUSES.contains(&status) {
-        bail!("Invalid status '{}'. Valid values: {}", status, INVOICE_VALID_STATUSES.join(", "));
+        bail!(
+            "Invalid status '{}'. Valid values: {}",
+            status,
+            INVOICE_VALID_STATUSES.join(", ")
+        );
     }
     let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let n = conn.execute(
@@ -186,7 +213,16 @@ mod tests {
     fn test_create_with_custom_number() {
         let c = conn();
         let cust_id = customer::create_customer(&c, "T", None, None, None).unwrap();
-        let id = create_invoice(&c, Some("CUSTOM-001"), None, cust_id, "2026-07-15", 200.0, None).unwrap();
+        let id = create_invoice(
+            &c,
+            Some("CUSTOM-001"),
+            None,
+            cust_id,
+            "2026-07-15",
+            200.0,
+            None,
+        )
+        .unwrap();
         let inv = get_invoice(&c, id).unwrap().unwrap();
         assert_eq!(inv.invoice_number, "CUSTOM-001");
     }
@@ -195,12 +231,30 @@ mod tests {
     fn test_filter_by_status() {
         let c = conn();
         let cust_id = customer::create_customer(&c, "T", None, None, None).unwrap();
-        create_invoice(&c, Some("INV-001"), None, cust_id, "2026-07-15", 100.0, None).unwrap();
-        create_invoice(&c, Some("INV-002"), None, cust_id, "2026-07-15", 200.0, None).unwrap();
+        create_invoice(
+            &c,
+            Some("INV-001"),
+            None,
+            cust_id,
+            "2026-07-15",
+            100.0,
+            None,
+        )
+        .unwrap();
+        create_invoice(
+            &c,
+            Some("INV-002"),
+            None,
+            cust_id,
+            "2026-07-15",
+            200.0,
+            None,
+        )
+        .unwrap();
         update_invoice_status(&c, 1, "paid").unwrap();
-        let list = list_invoices(&c, Some("paid"), None).unwrap();
+        let list = list_invoices(&c, Some("paid"), None, None, None).unwrap();
         assert_eq!(list.len(), 1);
-        let list = list_invoices(&c, Some("unpaid"), None).unwrap();
+        let list = list_invoices(&c, Some("unpaid"), None, None, None).unwrap();
         assert_eq!(list.len(), 1);
     }
 
@@ -208,8 +262,26 @@ mod tests {
     fn test_aging_report() {
         let c = conn();
         let cust_id = customer::create_customer(&c, "T", None, None, None).unwrap();
-        create_invoice(&c, Some("INV-001"), None, cust_id, "2026-07-15", 100.0, None).unwrap();
-        create_invoice(&c, Some("INV-002"), None, cust_id, "2026-07-15", 200.0, None).unwrap();
+        create_invoice(
+            &c,
+            Some("INV-001"),
+            None,
+            cust_id,
+            "2026-07-15",
+            100.0,
+            None,
+        )
+        .unwrap();
+        create_invoice(
+            &c,
+            Some("INV-002"),
+            None,
+            cust_id,
+            "2026-07-15",
+            200.0,
+            None,
+        )
+        .unwrap();
         update_invoice_status(&c, 2, "paid").unwrap();
         let aging = aging_report(&c).unwrap();
         assert_eq!(aging.len(), 1);
@@ -220,8 +292,18 @@ mod tests {
     fn test_validate_amount() {
         let c = conn();
         let cust_id = customer::create_customer(&c, "T", None, None, None).unwrap();
-        assert!(create_invoice(&c, Some("INV-003"), None, cust_id, "2026-07-15", 0.0, None).is_err());
-        assert!(create_invoice(&c, Some("INV-004"), None, cust_id, "2026-07-15", -10.0, None).is_err());
+        assert!(
+            create_invoice(&c, Some("INV-003"), None, cust_id, "2026-07-15", 0.0, None).is_err()
+        );
+        assert!(create_invoice(
+            &c,
+            Some("INV-004"),
+            None,
+            cust_id,
+            "2026-07-15",
+            -10.0,
+            None
+        )
+        .is_err());
     }
 }
-

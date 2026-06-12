@@ -1,7 +1,7 @@
-use rusqlite::{params, Connection};
-use anyhow::{Result, bail};
-use chrono::Local;
 use crate::model::product;
+use anyhow::{bail, Result};
+use chrono::Local;
+use rusqlite::{params, Connection};
 
 #[derive(Debug, Clone)]
 pub struct Order {
@@ -24,11 +24,16 @@ pub struct OrderItem {
     pub unit_price: f64,
 }
 
-const ORDER_VALID_STATUSES: &[&str] = &["pending", "confirmed", "shipped", "delivered", "cancelled"];
+const ORDER_VALID_STATUSES: &[&str] =
+    &["pending", "confirmed", "shipped", "delivered", "cancelled"];
 
 pub fn validate_status(status: &str, valid: &[&str]) -> Result<()> {
     if !valid.contains(&status) {
-        bail!("Invalid status '{}'. Valid values: {}", status, valid.join(", "));
+        bail!(
+            "Invalid status '{}'. Valid values: {}",
+            status,
+            valid.join(", ")
+        );
     }
     Ok(())
 }
@@ -43,7 +48,13 @@ pub fn create_order(conn: &Connection, customer_id: i64, notes: Option<&str>) ->
     Ok(conn.last_insert_rowid())
 }
 
-pub fn list_orders(conn: &Connection, status_filter: Option<&str>, customer_id: Option<i64>) -> Result<Vec<Order>> {
+pub fn list_orders(
+    conn: &Connection,
+    status_filter: Option<&str>,
+    customer_id: Option<i64>,
+    page: Option<i64>,
+    page_size: Option<i64>,
+) -> Result<Vec<Order>> {
     let mut sql = "SELECT id, customer_id, order_date, status, total_amount, notes, created_at, updated_at FROM orders WHERE 1=1".to_string();
     let mut args: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
     if let Some(s) = status_filter {
@@ -55,6 +66,15 @@ pub fn list_orders(conn: &Connection, status_filter: Option<&str>, customer_id: 
         args.push(Box::new(cid));
     }
     sql.push_str(" ORDER BY id");
+    if let (Some(ps), Some(p)) = (page_size, page) {
+        sql.push_str(&format!(
+            " LIMIT ?{} OFFSET ?{}",
+            args.len() + 1,
+            args.len() + 2
+        ));
+        args.push(Box::new(ps));
+        args.push(Box::new((p - 1) * ps));
+    }
     let mut stmt = conn.prepare(&sql)?;
     let params_refs: Vec<&dyn rusqlite::types::ToSql> = args.iter().map(|a| a.as_ref()).collect();
     let rows = stmt.query_map(params_refs.as_slice(), |row| {
@@ -148,7 +168,13 @@ pub fn delete_order(conn: &Connection, id: i64) -> Result<bool> {
     Ok(n > 0)
 }
 
-pub fn add_order_item(conn: &Connection, order_id: i64, product_id: i64, quantity: i64, unit_price: f64) -> Result<i64> {
+pub fn add_order_item(
+    conn: &Connection,
+    order_id: i64,
+    product_id: i64,
+    quantity: i64,
+    unit_price: f64,
+) -> Result<i64> {
     if quantity <= 0 {
         bail!("Quantity must be positive");
     }
@@ -247,10 +273,9 @@ mod tests {
         let o1 = create_order(&c, cust_id, None).unwrap();
         let o2 = create_order(&c, cust_id, None).unwrap();
         update_order_status(&c, o1, "confirmed").unwrap();
-        let list = list_orders(&c, Some("confirmed"), None).unwrap();
+        let list = list_orders(&c, Some("confirmed"), None, None, None).unwrap();
         assert_eq!(list.len(), 1);
-        let list = list_orders(&c, Some("pending"), None).unwrap();
+        let list = list_orders(&c, Some("pending"), None, None, None).unwrap();
         assert_eq!(list.len(), 1);
     }
 }
-

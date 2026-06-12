@@ -1,7 +1,7 @@
-use rusqlite::{params, Connection};
-use anyhow::{Result, bail};
-use chrono::Local;
 use crate::model::product;
+use anyhow::{bail, Result};
+use chrono::Local;
+use rusqlite::{params, Connection};
 
 #[derive(Debug, Clone)]
 pub struct PurchaseOrder {
@@ -26,7 +26,11 @@ pub struct PurchaseOrderItem {
 
 const PO_VALID_STATUSES: &[&str] = &["pending", "approved", "received", "cancelled"];
 
-pub fn create_purchase_order(conn: &Connection, supplier_id: i64, notes: Option<&str>) -> Result<i64> {
+pub fn create_purchase_order(
+    conn: &Connection,
+    supplier_id: i64,
+    notes: Option<&str>,
+) -> Result<i64> {
     let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let order_date = Local::now().format("%Y-%m-%d").to_string();
     conn.execute(
@@ -36,7 +40,12 @@ pub fn create_purchase_order(conn: &Connection, supplier_id: i64, notes: Option<
     Ok(conn.last_insert_rowid())
 }
 
-pub fn list_purchase_orders(conn: &Connection, status_filter: Option<&str>) -> Result<Vec<PurchaseOrder>> {
+pub fn list_purchase_orders(
+    conn: &Connection,
+    status_filter: Option<&str>,
+    page: Option<i64>,
+    page_size: Option<i64>,
+) -> Result<Vec<PurchaseOrder>> {
     let mut sql = "SELECT id, supplier_id, order_date, status, total_amount, notes, created_at, updated_at FROM purchase_orders WHERE 1=1".to_string();
     let mut args: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
     if let Some(s) = status_filter {
@@ -44,6 +53,15 @@ pub fn list_purchase_orders(conn: &Connection, status_filter: Option<&str>) -> R
         args.push(Box::new(s.to_string()));
     }
     sql.push_str(" ORDER BY id");
+    if let (Some(ps), Some(p)) = (page_size, page) {
+        sql.push_str(&format!(
+            " LIMIT ?{} OFFSET ?{}",
+            args.len() + 1,
+            args.len() + 2
+        ));
+        args.push(Box::new(ps));
+        args.push(Box::new((p - 1) * ps));
+    }
     let mut stmt = conn.prepare(&sql)?;
     let params_refs: Vec<&dyn rusqlite::types::ToSql> = args.iter().map(|a| a.as_ref()).collect();
     let rows = stmt.query_map(params_refs.as_slice(), |row| {
@@ -96,7 +114,11 @@ fn apply_po_stock(conn: &Connection, id: i64, multiplier: i64) -> Result<()> {
 pub fn update_purchase_order_status(conn: &Connection, id: i64, status: &str) -> Result<bool> {
     let valid = PO_VALID_STATUSES;
     if !valid.contains(&status) {
-        bail!("Invalid status '{}'. Valid values: {}", status, valid.join(", "));
+        bail!(
+            "Invalid status '{}'. Valid values: {}",
+            status,
+            valid.join(", ")
+        );
     }
     let po = match get_purchase_order(conn, id)? {
         Some(po) => po,
@@ -126,12 +148,21 @@ pub fn delete_purchase_order(conn: &Connection, id: i64) -> Result<bool> {
             apply_po_stock(conn, id, -1)?;
         }
     }
-    conn.execute("DELETE FROM purchase_order_items WHERE purchase_order_id = ?1", params![id])?;
+    conn.execute(
+        "DELETE FROM purchase_order_items WHERE purchase_order_id = ?1",
+        params![id],
+    )?;
     let n = conn.execute("DELETE FROM purchase_orders WHERE id = ?1", params![id])?;
     Ok(n > 0)
 }
 
-pub fn add_purchase_order_item(conn: &Connection, po_id: i64, product_id: i64, quantity: i64, unit_price: f64) -> Result<i64> {
+pub fn add_purchase_order_item(
+    conn: &Connection,
+    po_id: i64,
+    product_id: i64,
+    quantity: i64,
+    unit_price: f64,
+) -> Result<i64> {
     if quantity <= 0 {
         bail!("Quantity must be positive");
     }
@@ -175,8 +206,8 @@ pub fn list_purchase_order_items(conn: &Connection, po_id: i64) -> Result<Vec<Pu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::supplier;
     use crate::model::product;
+    use crate::model::supplier;
 
     fn conn() -> Connection {
         let c = Connection::open_in_memory().unwrap();
@@ -206,10 +237,9 @@ mod tests {
         let po1 = create_purchase_order(&c, sid, None).unwrap();
         let po2 = create_purchase_order(&c, sid, None).unwrap();
         update_purchase_order_status(&c, po1, "approved").unwrap();
-        let list = list_purchase_orders(&c, Some("approved")).unwrap();
+        let list = list_purchase_orders(&c, Some("approved"), None, None).unwrap();
         assert_eq!(list.len(), 1);
-        let list = list_purchase_orders(&c, Some("pending")).unwrap();
+        let list = list_purchase_orders(&c, Some("pending"), None, None).unwrap();
         assert_eq!(list.len(), 1);
     }
 }
-

@@ -1,6 +1,6 @@
-use rusqlite::Connection;
-use anyhow::Result;
 use crate::db;
+use anyhow::Result;
+use rusqlite::Connection;
 
 pub fn run(conn: &Connection) -> Result<()> {
     db::init_db(conn)?;

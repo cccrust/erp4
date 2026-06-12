@@ -1,6 +1,6 @@
-use rusqlite::{params, Connection};
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use chrono::Local;
+use rusqlite::{params, Connection};
 
 #[derive(Debug, Clone)]
 pub struct Customer {
@@ -22,7 +22,13 @@ pub fn validate_email_opt(email: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-pub fn create_customer(conn: &Connection, name: &str, email: Option<&str>, phone: Option<&str>, address: Option<&str>) -> Result<i64> {
+pub fn create_customer(
+    conn: &Connection,
+    name: &str,
+    email: Option<&str>,
+    phone: Option<&str>,
+    address: Option<&str>,
+) -> Result<i64> {
     validate_email_opt(email)?;
     let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     conn.execute(
@@ -32,14 +38,34 @@ pub fn create_customer(conn: &Connection, name: &str, email: Option<&str>, phone
     Ok(conn.last_insert_rowid())
 }
 
-pub fn list_customers(conn: &Connection, search: Option<&str>) -> Result<Vec<Customer>> {
-    let mut sql = "SELECT id, name, email, phone, address, created_at, updated_at FROM customers WHERE 1=1".to_string();
+pub fn list_customers(
+    conn: &Connection,
+    search: Option<&str>,
+    page: Option<i64>,
+    page_size: Option<i64>,
+) -> Result<Vec<Customer>> {
+    let mut sql =
+        "SELECT id, name, email, phone, address, created_at, updated_at FROM customers WHERE 1=1"
+            .to_string();
     let mut args: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
     if let Some(s) = search {
-        sql.push_str(" AND (name LIKE ?1 OR email LIKE ?1 OR phone LIKE ?1)");
+        let idx = args.len() + 1;
+        sql.push_str(&format!(
+            " AND (name LIKE ?{} OR email LIKE ?{} OR phone LIKE ?{})",
+            idx, idx, idx
+        ));
         args.push(Box::new(format!("%{}%", s)));
     }
     sql.push_str(" ORDER BY id");
+    if let (Some(ps), Some(p)) = (page_size, page) {
+        sql.push_str(&format!(
+            " LIMIT ?{} OFFSET ?{}",
+            args.len() + 1,
+            args.len() + 2
+        ));
+        args.push(Box::new(ps));
+        args.push(Box::new((p - 1) * ps));
+    }
     let mut stmt = conn.prepare(&sql)?;
     let params_refs: Vec<&dyn rusqlite::types::ToSql> = args.iter().map(|a| a.as_ref()).collect();
     let rows = stmt.query_map(params_refs.as_slice(), |row| {
@@ -79,7 +105,14 @@ pub fn get_customer(conn: &Connection, id: i64) -> Result<Option<Customer>> {
     }
 }
 
-pub fn update_customer(conn: &Connection, id: i64, name: Option<&str>, email: Option<&str>, phone: Option<&str>, address: Option<&str>) -> Result<bool> {
+pub fn update_customer(
+    conn: &Connection,
+    id: i64,
+    name: Option<&str>,
+    email: Option<&str>,
+    phone: Option<&str>,
+    address: Option<&str>,
+) -> Result<bool> {
     validate_email_opt(email)?;
     let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let existing = get_customer(conn, id)?;
@@ -127,11 +160,11 @@ mod tests {
         let c = conn();
         create_customer(&c, "Bob Inc", Some("bob@inc.com"), None, None).unwrap();
         create_customer(&c, "Alice Corp", Some("alice@corp.com"), None, None).unwrap();
-        let res = list_customers(&c, Some("Alice")).unwrap();
+        let res = list_customers(&c, Some("Alice"), None, None).unwrap();
         assert_eq!(res.len(), 1);
-        let res = list_customers(&c, Some("corp")).unwrap();
+        let res = list_customers(&c, Some("corp"), None, None).unwrap();
         assert_eq!(res.len(), 1);
-        let res = list_customers(&c, None).unwrap();
+        let res = list_customers(&c, None, None, None).unwrap();
         assert_eq!(res.len(), 2);
     }
 
@@ -142,4 +175,3 @@ mod tests {
         assert!(validate_email_opt(None).is_ok());
     }
 }
-

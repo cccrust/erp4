@@ -1,7 +1,8 @@
+use crate::cli::fmt;
+use crate::model::customer;
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 use rusqlite::Connection;
-use anyhow::Result;
-use crate::model::customer;
 
 #[derive(Parser)]
 pub struct CustomerCommand {
@@ -23,6 +24,12 @@ pub enum CustomerSubcommands {
     List {
         #[arg(long, short)]
         search: Option<String>,
+        #[arg(long, default_value = "table")]
+        format: String,
+        #[arg(long)]
+        page: Option<i64>,
+        #[arg(long)]
+        page_size: Option<i64>,
     },
     Get {
         id: i64,
@@ -45,52 +52,115 @@ pub enum CustomerSubcommands {
 
 pub fn run(conn: &Connection, cmd: &CustomerSubcommands) -> Result<()> {
     match cmd {
-        CustomerSubcommands::Add { name, email, phone, address } => {
-            let id = customer::create_customer(conn, name, email.as_deref(), phone.as_deref(), address.as_deref())?;
-            println!("Created customer #{}: {}", id, name);
+        CustomerSubcommands::Add {
+            name,
+            email,
+            phone,
+            address,
+        } => {
+            match customer::create_customer(
+                conn,
+                name,
+                email.as_deref(),
+                phone.as_deref(),
+                address.as_deref(),
+            ) {
+                Ok(id) => println!("已建立客戶 #{}: {}", id, name),
+                Err(e) => println!("{}", fmt::error_msg(&e.to_string())),
+            }
         }
-        CustomerSubcommands::List { search } => {
-            let customers = customer::list_customers(conn, search.as_deref())?;
+        CustomerSubcommands::List {
+            search,
+            format,
+            page,
+            page_size,
+        } => {
+            let customers = customer::list_customers(conn, search.as_deref(), *page, *page_size)?;
             if customers.is_empty() {
-                println!("No customers found.");
+                println!("查無客戶資料。");
                 return Ok(());
             }
-            println!("{:<4} {:<20} {:<25} {:<15} {:<30}", "ID", "Name", "Email", "Phone", "Address");
-            println!("{}", "-".repeat(100));
-            for c in &customers {
-                println!("{:<4} {:<20} {:<25} {:<15} {:<30}",
-                    c.id, c.name,
-                    c.email.as_deref().unwrap_or(""),
-                    c.phone.as_deref().unwrap_or(""),
-                    c.address.as_deref().unwrap_or(""));
-            }
-        }
-        CustomerSubcommands::Get { id } => {
-            match customer::get_customer(conn, *id)? {
-                Some(c) => {
-                    println!("ID:        {}", c.id);
-                    println!("Name:      {}", c.name);
-                    println!("Email:     {}", c.email.as_deref().unwrap_or("N/A"));
-                    println!("Phone:     {}", c.phone.as_deref().unwrap_or("N/A"));
-                    println!("Address:   {}", c.address.as_deref().unwrap_or("N/A"));
-                    println!("Created:   {}", c.created_at);
-                    println!("Updated:   {}", c.updated_at);
+            if format == "csv" {
+                println!(
+                    "{}",
+                    fmt::format_csv_line(&[
+                        "ID".into(),
+                        "Name".into(),
+                        "Email".into(),
+                        "Phone".into(),
+                        "Address".into()
+                    ])
+                );
+                for c in &customers {
+                    println!(
+                        "{}",
+                        fmt::format_csv_line(&[
+                            c.id.to_string(),
+                            c.name.clone(),
+                            c.email.as_deref().unwrap_or("").to_string(),
+                            c.phone.as_deref().unwrap_or("").to_string(),
+                            c.address.as_deref().unwrap_or("").to_string(),
+                        ])
+                    );
                 }
-                None => println!("Customer #{} not found.", id),
+            } else {
+                println!(
+                    "{}",
+                    fmt::header(&format!(
+                        "{:<4} {:<20} {:<25} {:<15} {:<30}",
+                        "ID", "名稱", "Email", "電話", "地址"
+                    ))
+                );
+                println!("{}", "-".repeat(100));
+                for c in &customers {
+                    println!(
+                        "{:<4} {:<20} {:<25} {:<15} {:<30}",
+                        c.id,
+                        c.name,
+                        c.email.as_deref().unwrap_or(""),
+                        c.phone.as_deref().unwrap_or(""),
+                        c.address.as_deref().unwrap_or("")
+                    );
+                }
             }
         }
-        CustomerSubcommands::Update { id, name, email, phone, address } => {
-            if customer::update_customer(conn, *id, name.as_deref(), email.as_deref(), phone.as_deref(), address.as_deref())? {
-                println!("Customer #{} updated.", id);
-            } else {
-                println!("Customer #{} not found.", id);
+        CustomerSubcommands::Get { id } => match customer::get_customer(conn, *id)? {
+            Some(c) => {
+                println!("ID:        {}", c.id);
+                println!("名稱:      {}", c.name);
+                println!("Email:     {}", c.email.as_deref().unwrap_or("N/A"));
+                println!("電話:      {}", c.phone.as_deref().unwrap_or("N/A"));
+                println!("地址:      {}", c.address.as_deref().unwrap_or("N/A"));
+                println!("建立時間:  {}", c.created_at);
+                println!("更新時間:  {}", c.updated_at);
+            }
+            None => println!("客戶 #{} 不存在。", id),
+        },
+        CustomerSubcommands::Update {
+            id,
+            name,
+            email,
+            phone,
+            address,
+        } => {
+            match customer::update_customer(
+                conn,
+                *id,
+                name.as_deref(),
+                email.as_deref(),
+                phone.as_deref(),
+                address.as_deref(),
+            ) {
+                Ok(true) => println!("客戶 #{} 已更新。", id),
+                Ok(false) => println!("客戶 #{} 不存在。", id),
+                Err(e) => println!("{}", fmt::error_msg(&e.to_string())),
             }
         }
         CustomerSubcommands::Delete { id } => {
             if customer::delete_customer(conn, *id)? {
-                println!("Customer #{} deleted.", id);
+                println!("客戶 #{} 已刪除。", id);
             } else {
-                println!("Customer #{} not found.", id);
+                println!("客戶 #{} 不存在。", id);
             }
         }
     }

@@ -1,5 +1,5 @@
-use rusqlite::Connection;
 use anyhow::Result;
+use rusqlite::Connection;
 
 pub fn init_db(conn: &Connection) -> Result<()> {
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -100,7 +100,7 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS sequences (
             name  TEXT PRIMARY KEY,
             value INTEGER NOT NULL DEFAULT 0
-        );"
+        );",
     )?;
 
     Ok(())

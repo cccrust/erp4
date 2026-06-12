@@ -1,24 +1,29 @@
 use clap::{Parser, Subcommand};
 
 pub mod customer;
-pub mod product;
-pub mod supplier;
-pub mod order;
-pub mod purchase_order;
-pub mod invoice;
-pub mod report;
+pub mod fmt;
 pub mod init;
+pub mod invoice;
+pub mod order;
+pub mod product;
+pub mod purchase_order;
+pub mod report;
+pub mod supplier;
 
 pub use customer::CustomerCommand;
-pub use product::ProductCommand;
-pub use supplier::SupplierCommand;
-pub use order::OrderCommand;
-pub use purchase_order::PurchaseOrderCommand;
 pub use invoice::InvoiceCommand;
+pub use order::OrderCommand;
+pub use product::ProductCommand;
+pub use purchase_order::PurchaseOrderCommand;
 pub use report::ReportCommand;
+pub use supplier::SupplierCommand;
 
 #[derive(Parser)]
-#[command(name = "erp4", version, about = "ERP4 - Enterprise Resource Planning CLI")]
+#[command(
+    name = "erp4",
+    version,
+    about = "ERP4 - Enterprise Resource Planning CLI"
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
